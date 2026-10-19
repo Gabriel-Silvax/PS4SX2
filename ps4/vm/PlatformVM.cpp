@@ -28,7 +28,7 @@
 
 namespace BuildVersion
 {
-	const char* GitRev = "PS4SX2-EMU-1.00-CHD-SMC (AI-assisted)";
+	const char* GitRev = "PS4SX2-ENHANCED-CPUQUEUE-V1 (experimental)";
 }
 namespace Host
 {
