@@ -3,7 +3,7 @@ name: Build PS4SX2
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'enhanced/**']
     paths-ignore:
       - 'MD/**'
       - '**/*.md'
