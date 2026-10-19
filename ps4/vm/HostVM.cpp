@@ -116,6 +116,18 @@ void Host::RunOnCPUThread(std::function<void()> function, bool block)
 		function();
 		return;
 	}
+
+	// Queue fire-and-forget work directly, without allocating a packaged task,
+	// shared ownership, and a future that will never be observed.
+	if (!block)
+	{
+		std::lock_guard lock(s_queue_mutex);
+		s_cpu_queue.emplace_back(std::move(function));
+		s_cpu_queue_pending.store(true, std::memory_order_release);
+		return;
+	}
+
+	// Synchronous callers still need a completion future before returning.
 	auto task = std::make_shared<std::packaged_task<void()>>(std::move(function));
 	auto done = task->get_future();
 	{
@@ -123,8 +135,7 @@ void Host::RunOnCPUThread(std::function<void()> function, bool block)
 		s_cpu_queue.emplace_back([task]() { (*task)(); });
 		s_cpu_queue_pending.store(true, std::memory_order_release);
 	}
-	if (block)
-		done.wait();
+	done.wait();
 }
 void Host::RunOnGSThread(std::function<void()> function)
 {
