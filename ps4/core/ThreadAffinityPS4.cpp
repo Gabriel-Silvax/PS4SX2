@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <cstring>
 #include <pthread.h>
 #include <unistd.h>
 
@@ -35,10 +36,25 @@ namespace PS4ThreadAffinity
 			return;
 		}
 
-		const unsigned long long mask = 1ULL << core;
-		const int result = scePthreadSetaffinity(scePthreadSelf(), mask);
-		// (AI-assisted) Core placement needs proper testing across base/Pro consoles.
-		std::printf("PS4 thread affinity: %s core=%d mask=0x%llx sce_result=0x%x\n", role, core, mask, result);
+		// Jaguar has two four-core L2 groups (0-3 and 4-7). In the original
+		// PS4 port EE=2 and VU1=3 compete for the first group's shared L2,
+		// while GS=4 sits alone in the second group. Try VU1=5 to put EE
+		// on its own L2 group. This is a benchmark hypothesis, not a proven
+		// faster layout: users can restore the prior placement with a marker.
+		const bool use_legacy = access("/data/PS4SX2/vm-jaguar-affinity-legacy", F_OK) == 0;
+		const bool split_vu = !use_legacy && role && std::strcmp(role, "VU1") == 0;
+		const int requested_core = split_vu ? 5 : core;
+		unsigned long long mask = 1ULL << requested_core;
+		int result = scePthreadSetaffinity(scePthreadSelf(), mask);
+		// Some console policies restrict CPU affinity. Fall back to the
+		// original role's mask rather than leaving an unexpected layout.
+		if (result != 0 && requested_core != core)
+		{
+			mask = 1ULL << core;
+			result = scePthreadSetaffinity(scePthreadSelf(), mask);
+		}
+		std::printf("PS4 Jaguar affinity: %s requested_core=%d applied_mask=0x%llx legacy=%d result=0x%x\n",
+			role, requested_core, mask, use_legacy ? 1 : 0, result);
 		std::fflush(stdout);
 	}
 } // namespace PS4ThreadAffinity
