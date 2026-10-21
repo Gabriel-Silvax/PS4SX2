@@ -735,22 +735,24 @@ static void* RunVM(void*)
 		"off",
 #endif
 		disable_shader_cache ? "disabled by marker" : "enabled", EmuFolders::Cache.c_str());
-	// (AI-assisted) Jaguar's per-four-core shared L2 is 2 MiB. The prior
-	// MTVU ring spans 16 MiB; on a cache-constrained CPU try 1 MiB so the
-	// producer revisits its working set sooner. 512 KiB/2 MiB variants and
-	// the original 16 MiB are selectable without rebuilding. Correctness and
-	// speed must be verified on real PS4 gameplay, especially wrap-heavy games.
-	u32 mtvu_ring_kb = 1024;
-	if (access("/data/PS4SX2/vm-jaguar-ring-legacy", F_OK) == 0)
-		mtvu_ring_kb = 16384;
-	else if (access("/data/PS4SX2/vm-jaguar-ring-512", F_OK) == 0)
+	// Audio recovery: restore PCSX2 port's 16 MiB MTVU ring by default.
+	// Reducing it to 1 MiB gave no meaningful improvement in the initial
+	// Budokai 3 test and caused more frequent ring wraps. The smaller
+	// working sets remain explicitly selectable for controlled benchmarks.
+	u32 mtvu_ring_kb = 16384;
+	if (access("/data/PS4SX2/vm-jaguar-ring-512", F_OK) == 0)
 		mtvu_ring_kb = 512;
+	else if (access("/data/PS4SX2/vm-jaguar-ring-1024", F_OK) == 0)
+		mtvu_ring_kb = 1024;
 	else if (access("/data/PS4SX2/vm-jaguar-ring-2048", F_OK) == 0)
 		mtvu_ring_kb = 2048;
+	// A legacy marker overrides the experimental sizes, for easy rollback.
+	if (access("/data/PS4SX2/vm-jaguar-ring-legacy", F_OK) == 0)
+		mtvu_ring_kb = 16384;
 	g_orbis_mtvu_ring_kb.store(mtvu_ring_kb, std::memory_order_relaxed);
 	const bool vu_history = access("/data/PS4SX2/vm-vu-history", F_OK) == 0;
 	g_ps4_mtvu_history_enabled.store(vu_history, std::memory_order_relaxed);
-	ProbeLog("Jaguar experiment: mtvu_ring_kb=%u vu_packet_history=%s, EE=2 GS=4 VU1=5 (legacy VU1=3, subject to affinity policy)\n",
+	ProbeLog("Audio recovery: mtvu_ring_kb=%u vu_packet_history=%s; pinned roles EE=2 VU1=3 GS=4 Audio=5 (subject to PS4 affinity policy)\n",
 		mtvu_ring_kb, vu_history ? "enabled" : "disabled");
 	ProbeLog("STAGE: CPUThreadInitialize (real VM, JIT, optional user disc)\n");
 	PS4Telemetry::Stage("cpu-init");
