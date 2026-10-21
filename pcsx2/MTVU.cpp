@@ -61,6 +61,11 @@ std::atomic<int> g_orbis_mtvu_batch{0};
 // 16384 (the whole 16 MB buffer, as before) by default. A shorter lap keeps the lines the EE thread writes
 // in the caches (a 16 MB lap comes back to lines long gone to memory). 256..16384. Needs proper testing.
 std::atomic<u32> g_orbis_mtvu_ring_kb{16384};
+// Jaguar performance build: packet histories are diagnostic-only. Every
+// recorded packet writes a small shared log and advances its index;
+// avoid that per-command work unless explicitly enabled before VM startup.
+// This does not alter any emulated VU command or ring-buffer order.
+std::atomic<bool> g_ps4_mtvu_history_enabled{false};
 extern std::atomic<u64> g_orbis_ee_evtests; // R5900.cpp
 extern std::atomic<u64> g_orbis_ee_vif1ints; // Vif1_Dma.cpp
 // Cumulative counts: event tests, VIF1 DMA interrupts, MTVU packets through the GIF fast path and through
@@ -101,6 +106,8 @@ namespace
 	u32 s_orbis_hist_pos = 0;
 	__fi void OrbisHist(u8 type, u32 a, u32 b, u32 c, u32 d)
 	{
+		if (!g_ps4_mtvu_history_enabled.load(std::memory_order_relaxed))
+			return;
 		s_orbis_hist[s_orbis_hist_pos % 24] = {type, a, b, c, d};
 		s_orbis_hist_pos++;
 	}
