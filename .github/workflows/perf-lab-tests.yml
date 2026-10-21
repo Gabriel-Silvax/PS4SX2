@@ -1,0 +1,25 @@
+name: PS4SX2 Python performance lab
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/optimization/**'
+      - '.github/workflows/perf-lab-tests.yml'
+  pull_request:
+    paths:
+      - 'tools/optimization/**'
+      - '.github/workflows/perf-lab-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run Python tests
+        run: python3 -m unittest discover -s tools/optimization -p 'test*.py' -v
