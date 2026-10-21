@@ -270,22 +270,15 @@ static void ApplyGameAspect(unsigned aspect)
 	ProbeLog("Aspect ratio applied: index=%u\n", aspect);
 }
 
-void VMHostPoll()
+// (AI-assisted) Hot EE event polling is allowed to skip the VMState query when
+// the host clock gate rejects a poll. The paused VM loop passes force=true,
+// preserving controller/menu input even when guest EE cycles stop advancing.
+// Requires PS4 gameplay A/B benchmarks to establish an actual speed benefit.
+static void VMHostPollImpl(bool force)
 {
 	++s_host_poll_calls;
-	// (AI-assisted) Paused/menu input must not be gated by EE cycles - otherwise
-	// the 16 ms paused loop (62 Hz) is throttled to one pad poll per 1024 calls
-	// ~16 seconds, appearing as a hang on L3+R3. Needs proper testing.
-	const VMState vm_state_early = VMManager::GetState();
-	const bool is_paused_menu = (vm_state_early == VMState::Paused) || s_game_menu_open;
-	if (!is_paused_menu)
-	{
-		// Fast path: gate clock query and CPU queue draining first to avoid
-		// atomic memory fences and state queries on ~600k events/s during FMV/DMA.
-		// Needs proper testing across games.
-		if (!s_host_poll_gate.ShouldCheckClock(cpuRegs.cycle))
-			return;
-	}
+	if (!force && !s_game_menu_open && !s_host_poll_gate.ShouldCheckClock(cpuRegs.cycle))
+		return;
 	VMHostDrainCPUQueue();
 	const VMState vm_state = VMManager::GetState();
 	if (vm_state != VMState::Running && vm_state != VMState::Paused)
@@ -586,6 +579,12 @@ static void PrepareEmulatorFolders(SettingsInterface& settings)
 		else
 			ProbeLog("Emulator directory FAILED: %s: %s\n", path, error.GetDescription().c_str());
 	}
+}
+
+// Normal running-VM event hook; the explicit pause loop uses VMHostPollImpl(true).
+void VMHostPoll()
+{
+	VMHostPollImpl(false);
 }
 
 static void* RunVM(void*)
@@ -913,8 +912,8 @@ static void* RunVM(void*)
 		{
 			if (VMManager::GetState() == VMState::Paused)
 			{
-				// Keep reading menu controls while the EE is paused.
-				VMHostPoll();
+				// Bypass the EE-cycle poll gate while paused: cycles don't advance.
+				VMHostPollImpl(true);
 				Threading::Sleep(16);
 			}
 			else
