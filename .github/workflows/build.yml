@@ -8,6 +8,8 @@ on:
       - 'MD/**'
       - '**/*.md'
       - 'tools/ps4-live-monitor/**'
+      - 'tools/optimization/**'
+      - '.github/workflows/perf-lab-tests.yml'
 
 permissions:
   contents: read
